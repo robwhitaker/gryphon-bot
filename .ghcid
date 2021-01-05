@@ -1,0 +1,1 @@
+--command "cabal --enable-nix v1-configure && cabal --enable-nix repl --repl-options=-fno-code --repl-options=-fno-break-on-exception --repl-options=-fno-break-on-error --repl-options=-v1 --repl-options=-ferror-spans --repl-options=-j" --clear --restart "gryphon-bot.cabal" --restart "default.nix"
