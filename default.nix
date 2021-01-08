@@ -1,5 +1,6 @@
-{ mkDerivation, aeson, base, calamity, di, di-polysemy, optics
-, polysemy, relude, req, servant, stdenv, unagi-chan
+{ mkDerivation, aeson, base, calamity, containers, di, di-polysemy
+, optics, polysemy, relude, req, servant-server, stdenv, time
+, unagi-chan, uuid
 }:
 mkDerivation {
   pname = "gryphon-bot";
@@ -8,8 +9,8 @@ mkDerivation {
   isLibrary = false;
   isExecutable = true;
   executableHaskellDepends = [
-    aeson base calamity di di-polysemy optics polysemy relude req
-    servant unagi-chan
+    aeson base calamity containers di di-polysemy optics polysemy
+    relude req servant-server time unagi-chan uuid
   ];
   description = "Discord bot for the Habitican Evolution party on Habitica";
   license = stdenv.lib.licenses.bsd3;
