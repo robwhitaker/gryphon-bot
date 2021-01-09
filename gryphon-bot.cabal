@@ -21,6 +21,7 @@ common common-options
                      , calamity
                      , di
                      , di-polysemy
+                     , di-core
                      , aeson
                      , unagi-chan
                      , req
@@ -28,11 +29,14 @@ common common-options
                      , uuid
                      , time
                      , containers
+                     , polysemy-plugin
+                     , warp
 
   mixins:              base hiding (Prelude)
                      , relude (Relude as Prelude)
 
   other-modules:       Habitica.Types
+                     , Web.Server
 
   default-extensions:  MultiWayIf
                      , DataKinds
@@ -56,7 +60,9 @@ common common-options
                      , TupleSections
                      , ViewPatterns
 
-  ghc-options:         -Wall
+  ghc-options:         -fplugin=Polysemy.Plugin
+
+                       -Wall
                        -Wcompat
                        -fwarn-tabs
                        -Widentities
