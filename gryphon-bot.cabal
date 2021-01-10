@@ -31,11 +31,13 @@ common common-options
                      , containers
                      , polysemy-plugin
                      , warp
+                     , http-client
 
   mixins:              base hiding (Prelude)
                      , relude (Relude as Prelude)
 
   other-modules:       Habitica.Types
+                     , Habitica.Request
                      , Web.Server
 
   default-extensions:  MultiWayIf

@@ -2148,11 +2148,6 @@
     note: "'getArgs' is already exported from Relude"
     rhs: getArgs
 - warn:
-    lhs: System.Environment.lookupEnv
-    name: "Use 'lookupEnv' from Relude"
-    note: "'lookupEnv' is already exported from Relude"
-    rhs: lookupEnv
-- warn:
     lhs: Data.List.genericDrop
     name: "Use 'genericDrop' from Relude"
     note: "'genericDrop' is already exported from Relude"

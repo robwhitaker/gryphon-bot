@@ -39,7 +39,7 @@
             "= in declaration": {
                 "force-linebreak": false,
                 "spaces": "both",
-                "linebreaks": "none"
+                "linebreaks": "after"
             },
             "-> in expression": {
                 "force-linebreak": false,
@@ -90,6 +90,11 @@
                 "force-linebreak": false,
                 "spaces": "none",
                 "linebreaks": "before"
+            },
+            ":: in declaration": {
+                "force-linebreak": true,
+                "spaces": "both",
+                "linebreaks": "none"
             }
         },
         "group": {
@@ -112,6 +117,11 @@
                 "force-linebreak": false,
                 "spaces": "both",
                 "linebreaks": "after"
+            },
+            "{ in expression": {
+                "force-linebreak": true,
+                "spaces": "both",
+                "linebreaks": "none"
             },
             "( in other": {
                 "force-linebreak": false,
@@ -162,8 +172,8 @@
             "where": false,
             "matches": false,
             "limits": [
-                80,
-                100
+                40,
+                25
             ],
             "case": true,
             "import-module": true,
