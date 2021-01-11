@@ -27,6 +27,10 @@
               primitive-extras = hsOverride "primitive-extras";
               happy = hsOverride "happy";
 
+              floskell = hsPackagesOld.floskell.overrideAttrs (_: {
+                patches = [ ./nix-overrides/patches/floskell.patch ];
+              });
+
               gryphon-bot = hsPackagesNew.callPackage ./. {};
             };
         };

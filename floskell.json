@@ -182,7 +182,7 @@
             "record-fields": true
         },
         "options": {
-            "sort-pragmas": true,
+            "sort-pragmas": false,
             "flexible-oneline": true,
             "decl-no-blank-lines": [],
             "split-language-pragmas": false,

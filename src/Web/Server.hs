@@ -38,25 +38,28 @@ data Config = Config
     , port           :: Int
     }
 
-type API = "discord" :> "party-message"
+type API =
+    "discord" :> "party-message"
     :> QueryParam "secret" Text :> ReqBody '[JSON] WebhookMessage :> PostNoContent
 
 -- Reference to the bot's event channel so we can send it
 -- events from the server
-type BotEventChanRef = IORef
-        (Maybe (InChan CalamityEvent))
+type BotEventChanRef =
+    IORef (Maybe (InChan CalamityEvent))
 
 -- Concrete effects stack for the final server
-type ServerEffects = '[ Input BotEventChanRef
-                      , Input Config
-                      , Error ServerError
-                      , LogEff
-                      , Embed IO
-                      , Final IO
-                      ]
+type ServerEffects =
+    '[ Input BotEventChanRef
+     , Input Config
+     , Error ServerError
+     , LogEff
+     , Embed IO
+     , Final IO
+     ]
 
-validateWebhookEventSource
-    :: Members '[LogEff, Input Config, Error ServerError] r => Maybe Text -> Sem r ()
+validateWebhookEventSource :: Members '[LogEff, Input Config, Error ServerError] r
+                           => Maybe Text
+                           -> Sem r ()
 validateWebhookEventSource mbSecret = DiP.push "validate-req-source" $ do
     expectedSecret <- P.inputs habiticaSecret
     case fmap (== expectedSecret) mbSecret of
@@ -67,16 +70,19 @@ validateWebhookEventSource mbSecret = DiP.push "validate-req-source" $ do
             DiP.notice_ "Denying request from unknown source"
             P.throw
                 $ Servant.err403
-                { errBody = "Who are you people???"
-                }
+                { errBody = "Who are you people???" }
 
-partyMessage
-    :: Members
-        '[LogEff, Input Config, Input BotEventChanRef, Error ServerError, Embed IO]
-        r
-    => Maybe Text
-    -> WebhookMessage
-    -> Sem r Servant.NoContent
+partyMessage :: Members
+                 '[ LogEff
+                  , Input Config
+                  , Input BotEventChanRef
+                  , Error ServerError
+                  , Embed IO
+                  ]
+                 r
+             => Maybe Text
+             -> WebhookMessage
+             -> Sem r Servant.NoContent
 partyMessage mbSecret msg = DiP.push "party-message" $ do
     validateWebhookEventSource mbSecret
     mbChan <- P.input >>= P.embed . readIORef
@@ -103,14 +109,14 @@ server :: Members ServerEffects r
 server = partyMessage
 
 runServer :: Config -> Di Di.Level Di.Path Di.Message -> BotEventChanRef -> IO ()
-runServer config di chanVar = Warp.run
-    (port config)
-    app
+runServer config di chanVar =
+    Warp.run (port config) app
   where
     api = Proxy @API
 
     semToHandler :: Sem ServerEffects a -> Handler a
-    semToHandler = Handler
+    semToHandler =
+        Handler
         . ExceptT
         . P.runFinal
         . P.embedToFinal

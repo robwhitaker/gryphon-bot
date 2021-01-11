@@ -85,8 +85,7 @@ habiticaHeaders userId (ApiKey apiKey) xClient' =
         , Req.header "x-client" (toClientString xClient')
         ]
 
-data HabiticaError =
-    HabiticaError
+data HabiticaError = HabiticaError
     { error   :: Text
     , message :: Text
     }
@@ -95,8 +94,7 @@ data HabiticaError =
 
 Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''HabiticaError
 
-newtype HabiticaResBody a =
-    HabiticaResBody
+newtype HabiticaResBody a = HabiticaResBody
     { unHabiticaResBody :: Either HabiticaError a
     }
   deriving stock ( Show, Eq )
@@ -112,8 +110,7 @@ instance FromJSON a => FromJSON (HabiticaResBody a) where
 type HabiticaResponse a =
     JsonResponse (HabiticaResBody a)
 
-data HabiticaRateLimit =
-    HabiticaRateLimit
+data HabiticaRateLimit = HabiticaRateLimit
     { limit      :: Int
     , remaining  :: Int
     , reset      :: UTCTime
