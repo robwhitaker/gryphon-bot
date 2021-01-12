@@ -36,7 +36,8 @@ common common-options
   mixins:              base hiding (Prelude)
                      , relude (Relude as Prelude)
 
-  other-modules:       Habitica.Types
+  other-modules:       Habitica.Api
+                     , Habitica.Types
                      , Habitica.Request
                      , Web.Server
 

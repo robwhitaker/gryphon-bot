@@ -16,6 +16,8 @@ module Habitica.Request
   , xClient
     -- * Making an API request
   , habiticaRequest
+    -- * Ignoring responses
+  , IgnoreData
     -- * Handling an API response
   , HabiticaError(..)
   , HabiticaResponse
@@ -109,6 +111,12 @@ instance FromJSON a => FromJSON (HabiticaResBody a) where
 
 type HabiticaResponse a =
     JsonResponse (HabiticaResBody a)
+
+data IgnoreData = IgnoreData
+  deriving stock ( Show )
+
+instance FromJSON IgnoreData where
+    parseJSON = const (pure IgnoreData)
 
 data HabiticaRateLimit = HabiticaRateLimit
     { limit      :: Int
