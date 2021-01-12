@@ -109,8 +109,7 @@ instance FromJSON a => FromJSON (HabiticaResBody a) where
                 then Right <$> o .: "data"
                 else Left <$> Aeson.parseJSON (Aeson.Object o)
 
-type HabiticaResponse a =
-    JsonResponse (HabiticaResBody a)
+type HabiticaResponse a = JsonResponse (HabiticaResBody a)
 
 data IgnoreData = IgnoreData
   deriving stock ( Show )
@@ -179,12 +178,13 @@ data HabiticaApi m a where
         -> Option 'Https
         -> HabiticaApi m (HabiticaResponse a)
 
-habiticaRequest :: (Member HabiticaApi r, ReqConstraints a method body)
-                => method
-                -> [Text]
-                -> body
-                -> Option 'Https
-                -> Sem r (HabiticaResponse a)
+habiticaRequest
+    :: (Member HabiticaApi r, ReqConstraints a method body)
+    => method
+    -> [Text]
+    -> body
+    -> Option 'Https
+    -> Sem r (HabiticaResponse a)
 habiticaRequest method endpoint body opts =
     P.send $ HabiticaRequest method url body opts
   where
@@ -192,10 +192,11 @@ habiticaRequest method endpoint body opts =
 
     url = foldl' (/:) apiBaseUrl endpoint
 
-runHabiticaApi :: Members '[Error HttpException, Embed IO] r
-               => HabiticaAuthHeaders
-               -> Sem (HabiticaApi ': r) a
-               -> Sem r a
+runHabiticaApi
+    :: Members '[Error HttpException, Embed IO] r
+    => HabiticaAuthHeaders
+    -> Sem (HabiticaApi ': r) a
+    -> Sem r a
 runHabiticaApi (HabiticaAuthHeaders headers) = P.interpret $ \case
     HabiticaRequest method url body opts -> P.mapError hideAPIKeyInExceptions
         $ P.fromException

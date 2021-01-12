@@ -44,8 +44,7 @@ type API =
 
 -- Reference to the bot's event channel so we can send it
 -- events from the server
-type BotEventChanRef =
-    IORef (Maybe (InChan CalamityEvent))
+type BotEventChanRef = IORef (Maybe (InChan CalamityEvent))
 
 -- Concrete effects stack for the final server
 type ServerEffects =
@@ -57,9 +56,8 @@ type ServerEffects =
      , Final IO
      ]
 
-validateWebhookEventSource :: Members '[LogEff, Input Config, Error ServerError] r
-                           => Maybe Text
-                           -> Sem r ()
+validateWebhookEventSource
+    :: Members '[LogEff, Input Config, Error ServerError] r => Maybe Text -> Sem r ()
 validateWebhookEventSource mbSecret = DiP.push "validate-req-source" $ do
     expectedSecret <- P.inputs habiticaSecret
     case fmap (== expectedSecret) mbSecret of
@@ -72,17 +70,13 @@ validateWebhookEventSource mbSecret = DiP.push "validate-req-source" $ do
                 $ Servant.err403
                 { errBody = "Who are you people???" }
 
-partyMessage :: Members
-                 '[ LogEff
-                  , Input Config
-                  , Input BotEventChanRef
-                  , Error ServerError
-                  , Embed IO
-                  ]
-                 r
-             => Maybe Text
-             -> WebhookMessage
-             -> Sem r Servant.NoContent
+partyMessage
+    :: Members
+        '[LogEff, Input Config, Input BotEventChanRef, Error ServerError, Embed IO]
+        r
+    => Maybe Text
+    -> WebhookMessage
+    -> Sem r Servant.NoContent
 partyMessage mbSecret msg = DiP.push "party-message" $ do
     validateWebhookEventSource mbSecret
     mbChan <- P.input >>= P.embed . readIORef
@@ -104,8 +98,7 @@ partyMessage mbSecret msg = DiP.push "party-message" $ do
 
     pure Servant.NoContent
 
-server :: Members ServerEffects r
-       => ServerT API (Sem r)
+server :: Members ServerEffects r => ServerT API (Sem r)
 server = partyMessage
 
 runServer :: Config -> Di Di.Level Di.Path Di.Message -> BotEventChanRef -> IO ()

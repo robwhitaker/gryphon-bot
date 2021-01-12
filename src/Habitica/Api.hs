@@ -20,8 +20,7 @@ import qualified Polysemy         as P
 import           Habitica.Request
 import           Habitica.Types
 
-fetchParty :: P.Member HabiticaApi r
-           => Sem r (HabiticaResponse Party)
+fetchParty :: P.Member HabiticaApi r => Sem r (HabiticaResponse Party)
 fetchParty = habiticaRequest GET ["groups", "party"] NoReqBody mempty
 
 fetchPartyMembers :: P.Member HabiticaApi r => Sem r (HabiticaResponse [Member])
@@ -32,10 +31,8 @@ fetchPartyMembers =
         NoReqBody
         ("includeAllPublicFields" =: True)
 
-setWebhookEnabled :: P.Member HabiticaApi r
-                  => Bool
-                  -> UUID
-                  -> Sem r (HabiticaResponse IgnoreData)
+setWebhookEnabled
+    :: P.Member HabiticaApi r => Bool -> UUID -> Sem r (HabiticaResponse IgnoreData)
 setWebhookEnabled enable webhookId =
     habiticaRequest
         PUT

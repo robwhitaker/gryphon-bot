@@ -92,9 +92,9 @@
                 "linebreaks": "before"
             },
             ":: in declaration": {
-                "force-linebreak": true,
+                "force-linebreak": false,
                 "spaces": "both",
-                "linebreaks": "none"
+                "linebreaks": "before"
             }
         },
         "group": {
@@ -147,7 +147,7 @@
             "indent": 1,
             "overfull-once": 200,
             "max-line-length": 88,
-            "linebreak": 10
+            "linebreak": 20
         },
         "indent": {
             "deriving": 2,
