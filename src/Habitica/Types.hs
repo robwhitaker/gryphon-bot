@@ -46,15 +46,15 @@ data Quest = Quest
     { progress :: !QuestProgress
     , active   :: !Bool
     , members  :: !(Map UUID Bool)
-    , key      :: !Text
+    , key      :: !(Maybe Text)
     }
   deriving stock ( Show, Eq, Generic )
   deriving anyclass ( FromJSON )
 
 data QuestProgress = QuestProgress
     { collect :: !(Map Text Int)
-    , hp      :: !Double
-    , rage    :: !Double
+    , hp      :: !(Maybe Double)
+    , rage    :: !(Maybe Double)
     }
   deriving stock ( Show, Eq, Generic )
   deriving anyclass ( FromJSON )
@@ -106,17 +106,24 @@ data ReceivingGroup = ReceivingGroup
 
 -- Member data
 data Member = Member
-    { id      :: !UUID
-    , auth    :: !MemberAuth
-    , items   :: !MemberItems
-    , party   :: !MemberParty
-    , profile :: !MemberProfile
+    { id          :: !UUID
+    , auth        :: !MemberAuth
+    , items       :: !MemberItems
+    , party       :: !MemberParty
+    , preferences :: !MemberPreferences
+    , profile     :: !MemberProfile
     }
   deriving stock ( Show, Eq, Generic )
   deriving anyclass ( FromJSON )
 
 newtype MemberProfile = MemberProfile
     { name :: Text
+    }
+  deriving stock ( Show, Eq, Generic )
+  deriving anyclass ( FromJSON )
+
+newtype MemberPreferences = MemberPreferences
+    { sleep :: Bool
     }
   deriving stock ( Show, Eq, Generic )
   deriving anyclass ( FromJSON )
@@ -168,7 +175,6 @@ instance FromJSON MemberQuestStatus where
 data PendingQuestProgress = PendingQuestProgress
     { up             :: !Double
     , collectedItems :: !Int
-    , collect        :: !(Map Text Int)
     }
   deriving stock ( Show, Eq, Generic )
   deriving anyclass ( FromJSON )
@@ -200,5 +206,7 @@ Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''MemberParty
 Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''MemberQuestStatus
 
 Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''PendingQuestProgress
+
+Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''MemberPreferences
 
 Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''MemberProfile

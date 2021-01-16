@@ -117,20 +117,25 @@ data HabiticaApiError = HabiticaApiError
 
 Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''HabiticaApiError
 
-newtype HabiticaResBody a = HabiticaResBody
-    { unHabiticaResBody :: Either HabiticaApiError a
+newtype RawHabiticaResBody a = RawHabiticaResBody
+    { unRawHabiticaResBody :: Either HabiticaApiError a
     }
   deriving stock ( Show, Eq )
 
-instance FromJSON a => FromJSON (HabiticaResBody a) where
-    parseJSON = Aeson.withObject "HabiticaResBody" $ \o -> do
+instance FromJSON a => FromJSON (RawHabiticaResBody a) where
+    parseJSON = Aeson.withObject "RawHabiticaResBody" $ \o -> do
         success <- o .: "success"
-        HabiticaResBody
+        RawHabiticaResBody
             <$> if success
                 then Right <$> o .: "data"
                 else Left <$> Aeson.parseJSON (Aeson.Object o)
 
-type HabiticaResponse a = JsonResponse (HabiticaResBody a)
+type RawHabiticaResponse a = JsonResponse (RawHabiticaResBody a)
+
+data HabiticaResponse a = HabiticaResponse
+    { rawResponse    :: RawHabiticaResponse a
+    , bodyOfResponse :: a
+    }
 
 data IgnoreData = IgnoreData
   deriving stock ( Show )
@@ -180,26 +185,26 @@ prettyPrintError = \case
         $ "Habitica API request failed with HabiticaError: "
         <> show (err ^. #error <> ": " <> err ^. #message)
 
-responseBody :: FromJSON a => HabiticaResponse a -> Either HabiticaApiError a
-responseBody = unHabiticaResBody . Req.responseBody
+responseBody :: HabiticaResponse a -> a
+responseBody = bodyOfResponse
 
 responseStatusCode :: FromJSON a => HabiticaResponse a -> Int
-responseStatusCode = Req.responseStatusCode
+responseStatusCode = Req.responseStatusCode . rawResponse
 
 responseStatusMessage :: FromJSON a => HabiticaResponse a -> ByteString
-responseStatusMessage = Req.responseStatusMessage
+responseStatusMessage = Req.responseStatusMessage . rawResponse
 
 responseHeader :: FromJSON a => HabiticaResponse a -> ByteString -> Maybe ByteString
-responseHeader = Req.responseHeader
+responseHeader = Req.responseHeader . rawResponse
 
 responseCookieJar :: FromJSON a => HabiticaResponse a -> HttpClient.CookieJar
-responseCookieJar = Req.responseCookieJar
+responseCookieJar = Req.responseCookieJar . rawResponse
 
-responseRateLimit :: FromJSON a => HabiticaResponse a -> Maybe HabiticaRateLimit
-responseRateLimit res = do
-    limit <- responseHeader res "X-RateLimit-Limit" >>= readBS
-    remaining <- responseHeader res "X-RateLimit-Remaining" >>= readBS
-    reset <- responseHeader res "X-RateLimit-Reset"
+responseRateLimit' :: FromJSON a => RawHabiticaResponse a -> Maybe HabiticaRateLimit
+responseRateLimit' res = do
+    limit <- Req.responseHeader res "X-RateLimit-Limit" >>= readBS
+    remaining <- Req.responseHeader res "X-RateLimit-Remaining" >>= readBS
+    reset <- Req.responseHeader res "X-RateLimit-Reset"
         >>=
         -- Habitica sends this in the format output by JavaScript's
         -- `new Date()`, so it has to be parsed manually
@@ -209,7 +214,7 @@ responseRateLimit res = do
         . decodeUtf8
     let retryAfter =
             fmap Time.secondsToNominalDiffTime
-            $ responseHeader res "Retry-After" >>= readBS
+            $ Req.responseHeader res "Retry-After" >>= readBS
     return
         HabiticaRateLimit
         { .. }
@@ -217,15 +222,22 @@ responseRateLimit res = do
     readBS :: Read a => ByteString -> Maybe a
     readBS = readMaybe . toString @Text . decodeUtf8
 
-responseRateLimitError
-    :: FromJSON a => HabiticaResponse a -> Maybe HabiticaRateLimitError
-responseRateLimitError res = case responseRateLimit res of
+responseRateLimit :: FromJSON a => HabiticaResponse a -> Maybe HabiticaRateLimit
+responseRateLimit = responseRateLimit' . rawResponse
+
+responseRateLimitError'
+    :: FromJSON a => RawHabiticaResponse a -> Maybe HabiticaRateLimitError
+responseRateLimitError' res = case responseRateLimit' res of
     Nothing        -> Nothing
     Just rateLimit -> HabiticaRateLimitError
         (rateLimit ^. #limit)
         (rateLimit ^. #remaining)
         (rateLimit ^. #reset)
         <$> (rateLimit ^. #retryAfter)
+
+responseRateLimitError
+    :: FromJSON a => HabiticaResponse a -> Maybe HabiticaRateLimitError
+responseRateLimitError = responseRateLimitError' . rawResponse
 
 type ReqConstraints a method body =
     ( FromJSON a
@@ -310,19 +322,19 @@ runHabiticaApi (HabiticaAuthHeaders headers) = P.interpret $ \case
                 DiP.debug_ $ prettyPrintError err
                 P.throw err
 
-        case responseRateLimitError res of
+        case responseRateLimitError' res of
             Just rateLimited -> do
                 let err = RateLimitError url rateLimited
                 DiP.debug_ $ prettyPrintError err
                 P.throw err
-            Nothing          -> case responseBody res of
+            Nothing          -> case unRawHabiticaResBody (Req.responseBody res) of
                 Left apiError -> do
                     let err = ApiError url apiError
                     DiP.debug_ $ prettyPrintError err
                     P.throw err
-                Right _       -> do
+                Right resBody -> do
                     DiP.debug_ "Success"
-                    pure res
+                    pure $ HabiticaResponse res resBody
   where
     httpConfig :: HttpConfig
     httpConfig =

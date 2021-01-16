@@ -1,6 +1,6 @@
 { mkDerivation, aeson, async, base, calamity, containers, di
 , di-core, di-polysemy, http-client, optics, polysemy
-, polysemy-plugin, relude, req, servant-server, stdenv, time
+, polysemy-plugin, relude, req, servant-server, stdenv, text, time
 , unagi-chan, uuid, warp
 }:
 mkDerivation {
@@ -12,7 +12,7 @@ mkDerivation {
   executableHaskellDepends = [
     aeson async base calamity containers di di-core di-polysemy
     http-client optics polysemy polysemy-plugin relude req
-    servant-server time unagi-chan uuid warp
+    servant-server text time unagi-chan uuid warp
   ];
   description = "Discord bot for the Habitican Evolution party on Habitica";
   license = stdenv.lib.licenses.bsd3;

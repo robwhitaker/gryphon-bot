@@ -71,7 +71,13 @@ main = do
 
         let serverAction =
                 runServer (config ^. #server) habiticaAuthHeaders di botInputChannelRef
-            botAction = runBot (config ^. #bot) discordToken di botInputChannelRef
+            botAction =
+                runBot
+                    (config ^. #bot)
+                    habiticaAuthHeaders
+                    discordToken
+                    di
+                    botInputChannelRef
 
         void $ Async.withAsync botAction $ \bot -> do
             Async.withAsync serverAction $ \server -> do

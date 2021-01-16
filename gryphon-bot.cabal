@@ -33,11 +33,15 @@ common common-options
                      , warp
                      , http-client
                      , async
+                     , text
 
   mixins:              base hiding (Prelude)
                      , relude (Relude as Prelude)
 
   other-modules:       GryphonBot.Bot
+                     , GryphonBot.Commands.QuestProgress
+                     , GryphonBot.Commands.Types
+                     , GryphonBot.Utils
                      , Habitica.Api
                      , Habitica.Request
                      , Habitica.Types
