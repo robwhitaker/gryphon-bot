@@ -32,13 +32,16 @@ common common-options
                      , polysemy-plugin
                      , warp
                      , http-client
+                     , async
 
   mixins:              base hiding (Prelude)
                      , relude (Relude as Prelude)
 
-  other-modules:       Habitica.Api
-                     , Habitica.Types
+  other-modules:       GryphonBot.Bot
+                     , Habitica.Api
                      , Habitica.Request
+                     , Habitica.Types
+                     , Types
                      , Web.Server
 
   default-extensions:  MultiWayIf
@@ -68,6 +71,7 @@ common common-options
                        -Wall
                        -Wcompat
                        -fwarn-tabs
+                       -Wno-unused-do-bind
                        -Widentities
                        -Wincomplete-uni-patterns
                        -Wincomplete-record-updates
@@ -75,7 +79,6 @@ common common-options
                        -Wwarn=unused-imports
                        -Wwarn=unused-local-binds
                        -Wwarn=unused-matches
-                       -Wwarn=unused-do-bind
                        -Wwarn=deprecations
   if impl(ghc >= 8.0)
     ghc-options:       -Wredundant-constraints

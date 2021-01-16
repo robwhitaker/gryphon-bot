@@ -46,6 +46,11 @@
                 "spaces": "both",
                 "linebreaks": "after"
             },
+            "<- in expression": {
+                "force-linebreak": false,
+                "spaces": "both",
+                "linebreaks": "before"
+            },
             "default": {
                 "force-linebreak": false,
                 "spaces": "both",
@@ -62,11 +67,6 @@
                 "linebreaks": "none"
             },
             ", in other": {
-                "force-linebreak": false,
-                "spaces": "after",
-                "linebreaks": "before"
-            },
-            "( in other": {
                 "force-linebreak": false,
                 "spaces": "after",
                 "linebreaks": "before"
@@ -88,8 +88,8 @@
             },
             ", in pattern": {
                 "force-linebreak": false,
-                "spaces": "none",
-                "linebreaks": "before"
+                "spaces": "after",
+                "linebreaks": "none"
             },
             ":: in declaration": {
                 "force-linebreak": false,
@@ -127,6 +127,16 @@
                 "force-linebreak": false,
                 "spaces": "both",
                 "linebreaks": "before"
+            },
+            "( in pattern": {
+                "force-linebreak": false,
+                "spaces": "none",
+                "linebreaks": "none"
+            },
+            "( in type": {
+                "force-linebreak": false,
+                "spaces": "none",
+                "linebreaks": "after"
             }
         },
         "layout": {
@@ -147,7 +157,7 @@
             "indent": 1,
             "overfull-once": 200,
             "max-line-length": 88,
-            "linebreak": 20
+            "linebreak": 30
         },
         "indent": {
             "deriving": 2,

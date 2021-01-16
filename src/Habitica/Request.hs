@@ -1,4 +1,6 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -16,66 +18,85 @@ module Habitica.Request
   , xClient
     -- * Making an API request
   , habiticaRequest
+  , retry
     -- * Ignoring responses
   , IgnoreData
     -- * Handling an API response
-  , HabiticaError(..)
   , HabiticaResponse
   , responseBody
   , responseCookieJar
   , responseHeader
   , responseRateLimit
+  , responseRateLimitError
   , responseStatusCode
   , responseStatusMessage
+    -- * Handling errors from the API
+  , HabiticaApiError
+  , HabiticaRateLimitError
+  , HabiticaRequestError(..)
+  , prettyPrintError
+  , urlFromError
     -- * HabiticaApi effect interpreter
   , HabiticaApi
   , runHabiticaApi ) where
 
-import qualified System.Environment  as Env
+import qualified System.Environment    as Env
 
-import           Data.Aeson          ( (.:), FromJSON )
-import qualified Data.Aeson          as Aeson
-import           Data.Time           ( NominalDiffTime, UTCTime )
-import qualified Data.Time           as Time
-import qualified Data.Time.Format    as TimeFmt
-import           Data.UUID           ( UUID )
-import qualified Data.UUID           as UUID
+import qualified Control.Concurrent    as Concurrent
 
-import qualified Network.HTTP.Client as HttpClient
-import           Network.HTTP.Req    ( (/:), AllowsBody, HttpBody, HttpBodyAllowed
-                                     , HttpConfig, HttpException(VanillaHttpException)
-                                     , HttpMethod, JsonResponse, Option, ProvidesBody
-                                     , Scheme(..), Url, httpConfigCheckResponse )
-import qualified Network.HTTP.Req    as Req
+import           Data.Aeson            ( (.:), FromJSON )
+import qualified Data.Aeson            as Aeson
+import qualified Data.Fixed            as Fixed
+import           Data.Time             ( NominalDiffTime, UTCTime )
+import qualified Data.Time             as Time
+import qualified Data.Time.Format      as TimeFmt
+import           Data.UUID             ( UUID )
+import qualified Data.UUID             as UUID
+
+import           Calamity.Types.LogEff ( LogEff )
+
+import qualified DiPolysemy            as DiP
+
+import qualified Network.HTTP.Client   as HttpClient
+import           Network.HTTP.Req      ( (/:), AllowsBody, HttpBody, HttpBodyAllowed
+                                       , HttpConfig, HttpException(VanillaHttpException)
+                                       , HttpMethod, JsonResponse, Option, ProvidesBody
+                                       , Scheme(..), Url, httpConfigCheckResponse )
+import qualified Network.HTTP.Req      as Req
 
 import qualified Optics
+import           Optics                ( (^.) )
 
-import           Polysemy            ( Member, Members, Sem )
-import qualified Polysemy            as P
-import           Polysemy.Embed      ( Embed )
-import           Polysemy.Error      ( Error )
-import qualified Polysemy.Error      as P
-import qualified Polysemy.Internal   as P ( send )
+import           Polysemy              ( Member, Members, Sem )
+import qualified Polysemy              as P
+import           Polysemy.Embed        ( Embed )
+import           Polysemy.Error        ( Error )
+import qualified Polysemy.Error        as P
+import qualified Polysemy.Internal     as P ( send )
 
-import           Prelude             hiding ( Option )
+import           Prelude               hiding ( Option )
 
-newtype HabiticaAuthHeaders =
-    HabiticaAuthHeaders (Option 'Https)
+newtype HabiticaAuthHeaders = HabiticaAuthHeaders (Option 'Https)
 
 newtype XClient = XClient (UUID, Text)
 
 newtype ApiKey = ApiKey UUID
 
-readApiKeyFromEnv :: String -> IO (Maybe ApiKey)
+readApiKeyFromEnv :: String -> IO (Either Text ApiKey)
 readApiKeyFromEnv envVar = do
     mbKey <- Env.lookupEnv envVar
-    return $ mbKey >>= fmap ApiKey . UUID.fromString
+    case mbKey of
+        Nothing     ->
+            pure $ Left $ "Could not find " <> fromString envVar <> " in environment"
+        Just keyStr -> case UUID.fromString keyStr of
+            Nothing  -> pure $ Left "Unable to parse Habitica API key"
+            Just key -> pure $ Right $ ApiKey key
 
 xClient :: UUID -> Text -> XClient
 xClient maintainerId appName = XClient (maintainerId, appName)
 
 toClientString :: XClient -> ByteString
-toClientString (XClient (maintainerId,appName)) =
+toClientString (XClient (maintainerId, appName)) =
     UUID.toASCIIBytes maintainerId <> "-" <> encodeUtf8 appName
 
 habiticaHeaders :: UUID -> ApiKey -> XClient -> HabiticaAuthHeaders
@@ -87,17 +108,17 @@ habiticaHeaders userId (ApiKey apiKey) xClient' =
         , Req.header "x-client" (toClientString xClient')
         ]
 
-data HabiticaError = HabiticaError
+data HabiticaApiError = HabiticaApiError
     { error   :: Text
     , message :: Text
     }
   deriving stock ( Show, Eq, Generic )
   deriving anyclass ( FromJSON )
 
-Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''HabiticaError
+Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''HabiticaApiError
 
 newtype HabiticaResBody a = HabiticaResBody
-    { unHabiticaResBody :: Either HabiticaError a
+    { unHabiticaResBody :: Either HabiticaApiError a
     }
   deriving stock ( Show, Eq )
 
@@ -127,7 +148,39 @@ data HabiticaRateLimit = HabiticaRateLimit
 
 Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''HabiticaRateLimit
 
-responseBody :: FromJSON a => HabiticaResponse a -> Either HabiticaError a
+data HabiticaRateLimitError = HabiticaRateLimitError
+    { limit      :: Int
+    , remaining  :: Int
+    , reset      :: UTCTime
+    , retryAfter :: NominalDiffTime
+    }
+  deriving stock ( Show, Eq )
+
+Optics.makeFieldLabelsWith Optics.noPrefixFieldLabels ''HabiticaRateLimitError
+
+data HabiticaRequestError
+    = HttpError (Url 'Https) HttpException
+    | RateLimitError (Url 'Https) HabiticaRateLimitError
+    | ApiError (Url 'Https) HabiticaApiError
+  deriving stock ( Show )
+
+urlFromError :: HabiticaRequestError -> Url 'Https
+urlFromError = \case
+    HttpError url _      -> url
+    RateLimitError url _ -> url
+    ApiError url _       -> url
+
+prettyPrintError :: IsString a => HabiticaRequestError -> a
+prettyPrintError = \case
+    HttpError _ err      ->
+        fromString $ "Habitica API request failed with HTTP error: " <> show err
+    RateLimitError _ err ->
+        fromString $ "Habitica API request failed due to rate limiting: " <> show err
+    ApiError _ err       -> fromString
+        $ "Habitica API request failed with HabiticaError: "
+        <> show (err ^. #error <> ": " <> err ^. #message)
+
+responseBody :: FromJSON a => HabiticaResponse a -> Either HabiticaApiError a
 responseBody = unHabiticaResBody . Req.responseBody
 
 responseStatusCode :: FromJSON a => HabiticaResponse a -> Int
@@ -164,11 +217,22 @@ responseRateLimit res = do
     readBS :: Read a => ByteString -> Maybe a
     readBS = readMaybe . toString @Text . decodeUtf8
 
+responseRateLimitError
+    :: FromJSON a => HabiticaResponse a -> Maybe HabiticaRateLimitError
+responseRateLimitError res = case responseRateLimit res of
+    Nothing        -> Nothing
+    Just rateLimit -> HabiticaRateLimitError
+        (rateLimit ^. #limit)
+        (rateLimit ^. #remaining)
+        (rateLimit ^. #reset)
+        <$> (rateLimit ^. #retryAfter)
+
 type ReqConstraints a method body =
     ( FromJSON a
     , HttpMethod method
     , HttpBody body
-    , HttpBodyAllowed (AllowsBody method) (ProvidesBody body))
+    , HttpBodyAllowed (AllowsBody method) (ProvidesBody body)
+    )
 
 data HabiticaApi m a where
     HabiticaRequest :: ReqConstraints a method body
@@ -192,16 +256,73 @@ habiticaRequest method endpoint body opts =
 
     url = foldl' (/:) apiBaseUrl endpoint
 
+retry :: forall a r.
+      ( FromJSON a
+      , Members '[LogEff, HabiticaApi, Error HabiticaRequestError, Embed IO] r
+      )
+      => Int
+      -> Sem r (HabiticaResponse a)
+      -> Sem r (HabiticaResponse a)
+retry
+    retriesLeft
+    act | retriesLeft <= 0 = act
+        | otherwise = do
+            act `P.catch` \err ->
+                DiP.attr "route" (Req.renderUrl $ urlFromError err) $ do
+                    case err of
+                        HttpError _ _              -> handleError (seconds 5) err
+                        RateLimitError _ rateLimit ->
+                            let delay =
+                                    diffTimeToMicroSeconds (rateLimit ^. #retryAfter)
+                                    + seconds 5
+                            in handleError delay err
+                        ApiError _ _               -> P.throw err
+  where
+    seconds :: Int -> Int
+    seconds s = s * 1000000
+
+    diffTimeToMicroSeconds :: NominalDiffTime -> Int
+    diffTimeToMicroSeconds diffTime = seconds $ fromInteger (Fixed.resolution picos)
+      where
+        picos = Time.nominalDiffTimeToSeconds diffTime
+
+    handleError :: Int -> HabiticaRequestError -> Sem r (HabiticaResponse a)
+    handleError delay err = do
+        DiP.info_
+            $ "An error occurred while running a Habitica request. Retries left: "
+            <> show retriesLeft
+            <> ". Error was: "
+            <> show err
+        when (delay > 0) $ P.embed $ Concurrent.threadDelay delay
+        retry (retriesLeft - 1) act
+
 runHabiticaApi
-    :: Members '[Error HttpException, Embed IO] r
+    :: Members '[LogEff, Error HabiticaRequestError, Embed IO] r
     => HabiticaAuthHeaders
     -> Sem (HabiticaApi ': r) a
     -> Sem r a
 runHabiticaApi (HabiticaAuthHeaders headers) = P.interpret $ \case
-    HabiticaRequest method url body opts -> P.mapError hideAPIKeyInExceptions
-        $ P.fromException
-        $ Req.runReq httpConfig
-        $ Req.req method url body Req.jsonResponse (headers <> opts)
+    HabiticaRequest method url body opts -> DiP.attr "route" (Req.renderUrl url) $ do
+        let request = Req.req method url body Req.jsonResponse (headers <> opts)
+        res <- (Req.runReq httpConfig request
+                & P.fromExceptionVia (HttpError url . hideAPIKeyInExceptions))
+            `P.catch` \err -> do
+                DiP.debug_ $ prettyPrintError err
+                P.throw err
+
+        case responseRateLimitError res of
+            Just rateLimited -> do
+                let err = RateLimitError url rateLimited
+                DiP.debug_ $ prettyPrintError err
+                P.throw err
+            Nothing          -> case responseBody res of
+                Left apiError -> do
+                    let err = ApiError url apiError
+                    DiP.debug_ $ prettyPrintError err
+                    P.throw err
+                Right _       -> do
+                    DiP.debug_ "Success"
+                    pure res
   where
     httpConfig :: HttpConfig
     httpConfig =
@@ -216,7 +337,7 @@ runHabiticaApi (HabiticaAuthHeaders headers) = P.interpret $ \case
             let requestApiMasked =
                     request
                     { HttpClient.requestHeaders =
-                          fmap (\header@(headerName,_) ->
+                          fmap (\header@(headerName, _) ->
                                 if headerName == "x-api-key"
                                 then (headerName, "(hidden)")
                                 else header) (HttpClient.requestHeaders request) }

@@ -1,9 +1,8 @@
-module Web.Server ( runServer, Config(..) ) where
+module Web.Server ( runServer ) where
 
-import           Control.Concurrent.Chan.Unagi ( InChan )
 import qualified Control.Concurrent.Chan.Unagi as Unagi
+import           Control.Exception             ( bracket_ )
 
-import           Calamity                      ( CalamityEvent )
 import qualified Calamity
 import           Calamity.Types.LogEff         ( LogEff )
 
@@ -12,12 +11,13 @@ import           Di.Core                       ( Di )
 
 import qualified DiPolysemy                    as DiP
 
+import qualified Network.HTTP.Req              as Req
 import qualified Network.Wai.Handler.Warp      as Warp
 
 import           Optics                        ( (%), (^.) )
 
 import qualified Polysemy                      as P
-import           Polysemy                      ( Members, Sem )
+import           Polysemy                      ( Member, Members, Sem )
 import           Polysemy.Embed                ( Embed )
 import           Polysemy.Error                ( Error )
 import qualified Polysemy.Error                as P
@@ -30,26 +30,22 @@ import           Servant                       ( (:>), Handler(..), JSON, PostNo
                                                , QueryParam, ReqBody, ServerError
                                                , ServerT, errBody )
 
-import           Habitica.Types                ( SenderId(..), WebhookMessage(..) )
+import           Types                         ( BotEventChanRef, ServerConfig )
 
--- TODO: Replace with proper config type
-data Config = Config
-    { habiticaSecret :: Text
-    , port           :: Int
-    }
+import qualified Habitica.Api                  as Api
+import           Habitica.Request              ( HabiticaAuthHeaders
+                                               , HabiticaRequestError, prettyPrintError
+                                               , retry, runHabiticaApi, urlFromError )
+import           Habitica.Types                ( SenderId(..), WebhookMessage(..) )
 
 type API =
     "discord" :> "party-message"
     :> QueryParam "secret" Text :> ReqBody '[JSON] WebhookMessage :> PostNoContent
 
--- Reference to the bot's event channel so we can send it
--- events from the server
-type BotEventChanRef = IORef (Maybe (InChan CalamityEvent))
-
 -- Concrete effects stack for the final server
 type ServerEffects =
     '[ Input BotEventChanRef
-     , Input Config
+     , Input ServerConfig
      , Error ServerError
      , LogEff
      , Embed IO
@@ -57,27 +53,35 @@ type ServerEffects =
      ]
 
 validateWebhookEventSource
-    :: Members '[LogEff, Input Config, Error ServerError] r => Maybe Text -> Sem r ()
+    :: Members '[LogEff, Input ServerConfig, Error ServerError] r
+    => Maybe Text
+    -> Sem r ()
 validateWebhookEventSource mbSecret = DiP.push "validate-req-source" $ do
-    expectedSecret <- P.inputs habiticaSecret
+    expectedSecret <- P.inputs (^. #habiticaSecret)
     case fmap (== expectedSecret) mbSecret of
         Just True -> do
-            DiP.info_ "Request source successfully validated"
+            DiP.debug_ "Request source successfully validated"
 
         _         -> do
-            DiP.notice_ "Denying request from unknown source"
+            DiP.warning_ "Denying request from unknown source"
             P.throw
                 $ Servant.err403
                 { errBody = "Who are you people???" }
 
 partyMessage
     :: Members
-        '[LogEff, Input Config, Input BotEventChanRef, Error ServerError, Embed IO]
+        '[ LogEff
+         , Input ServerConfig
+         , Input BotEventChanRef
+         , Error ServerError
+         , Embed IO
+         ]
         r
     => Maybe Text
     -> WebhookMessage
     -> Sem r Servant.NoContent
-partyMessage mbSecret msg = DiP.push "party-message" $ do
+partyMessage mbSecret msg = DiP.push "discord" $ DiP.push "party-message" $ do
+    DiP.info_ "Received a party message, processing before sending to bot"
     validateWebhookEventSource mbSecret
     mbChan <- P.input >>= P.embed . readIORef
     case mbChan of
@@ -85,25 +89,34 @@ partyMessage mbSecret msg = DiP.push "party-message" $ do
             "Calamity input event channel missing. Not sending message to Discord"
 
         Just chan -> do
-            let (chatMsg,shouldSend) = case msg of
+            let (chatMsg, shouldSend) = case msg of
                     GroupChatReceived gcr -> (gcr, gcr ^. #chat % #uuid == System)
             if shouldSend
                 then do
-                    DiP.info_ "Message is system message. Sending bot event."
+                    DiP.debug_ "Message is system message. Sending bot event."
                     P.embed
                         $ Unagi.writeChan
                             chan
                             (Calamity.customEvt @"system-message" chatMsg)
-                else DiP.info_ "Message is a user message. Ignoring."
+                else DiP.debug_ "Message is a user message. Ignoring."
 
     pure Servant.NoContent
 
 server :: Members ServerEffects r => ServerT API (Sem r)
 server = partyMessage
 
-runServer :: Config -> Di Di.Level Di.Path Di.Message -> BotEventChanRef -> IO ()
-runServer config di chanVar =
-    Warp.run (port config) app
+runServer :: ServerConfig
+          -> HabiticaAuthHeaders
+          -> Di Di.Level Di.Path Di.Message
+          -> BotEventChanRef
+          -> IO ()
+runServer config headers di chanVar =
+    bracket_ (trySetWebhookEnabled 5 True) (trySetWebhookEnabled 5 False) $ do
+        Di.runDiT di
+            $ Di.push "server"
+            $ Di.notice_
+            $ "Starting HTTP server on port " <> show (config ^. #port)
+        liftIO $ Warp.run (config ^. #port) app
   where
     api = Proxy @API
 
@@ -117,5 +130,37 @@ runServer config di chanVar =
         . P.runError
         . P.runInputConst config
         . P.runInputConst chanVar
+        . DiP.push "server"
+        . DiP.attr "port" (config ^. #port)
+
+    trySetWebhookEnabled :: Int -> Bool -> IO ()
+    trySetWebhookEnabled maxAttempts enabled =
+        void
+        . P.runFinal
+        . P.embedToFinal
+        . DiP.runDiToIO di
+        . logError
+        . runHabiticaApi headers
+        $ DiP.push "server"
+        $ DiP.push phase
+        $ do
+            DiP.info_ $ startingOrStopping <> " system-messages webhook"
+            retry maxAttempts $ Api.setWebhookEnabled enabled (config ^. #webhookId)
+      where
+        (startingOrStopping, phase) =
+            if enabled
+            then ("Starting", "setup")
+            else ("Stopping", "teardown")
+
+        logError :: Member LogEff r
+                 => Sem (Error HabiticaRequestError ': r) a
+                 -> Sem r (Either HabiticaRequestError a)
+        logError sem = do
+            res <- P.runError sem
+            case res of
+                Left err -> DiP.attr "route" (Req.renderUrl $ urlFromError err) $ do
+                    DiP.error_ $ prettyPrintError err
+                    pure res
+                Right _  -> pure res
 
     app = Servant.serve api $ Servant.hoistServer api semToHandler server
