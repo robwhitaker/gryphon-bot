@@ -25,14 +25,10 @@ main = do
     Di.new $ \di -> do
         (config, discordToken, habiticaAuthHeaders)
             <- Di.runDiT di $ Di.push "init" $ do
-                env <- liftIO $ Env.lookupEnv "BOT_ENV"
-                configFile <- case env of
-                    Just "prod" -> do
-                        Di.notice_ "Running in environment: PROD"
-                        pure "/etc/gryphon-bot/config.json"
-                    _           -> do
-                        Di.notice_ "Running in environment: DEV"
-                        pure "config.json"
+                !mbConfigFile <- liftIO $ Env.lookupEnv "BOT_CONFIG"
+                !configFile <- case mbConfigFile of
+                    Just file -> pure file
+                    _         -> failWithLog "Could not find BOT_CONFIG in environment"
 
                 Di.info_ $ "Parsing configuration file: " <> fromString configFile
                 !(config :: Config) <- do
