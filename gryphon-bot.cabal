@@ -39,8 +39,10 @@ common common-options
                      , relude (Relude as Prelude)
 
   other-modules:       GryphonBot.Bot
+                     , GryphonBot.Commands.LastCrons
                      , GryphonBot.Commands.QuestProgress
                      , GryphonBot.Commands.Types
+                     , GryphonBot.Commands.Utils
                      , GryphonBot.Utils
                      , Habitica.Api
                      , Habitica.Request
@@ -110,3 +112,4 @@ executable gryphon-bot
                        -O2
                        -flate-specialise
                        -fspecialise-aggressively
+                       -ddump-minimal-imports

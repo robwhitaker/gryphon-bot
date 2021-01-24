@@ -33,6 +33,7 @@ import qualified Polysemy.Reader                   as P
 import           Types                             ( BotConfig, BotEventChan
                                                    , BotEventChanRef )
 
+import           GryphonBot.Commands.LastCrons     as BotCommands
 import           GryphonBot.Commands.QuestProgress as BotCommands
 import           GryphonBot.Utils                  ( tell )
 
@@ -78,6 +79,11 @@ bot = do
             "questProgress"
             ["questprogress", "quest_progress"]
             BotCommands.questProgress
+        Commands.commandA
+            @'[]
+            "lastCrons"
+            ["lastcrons", "last_crons"]
+            BotCommands.lastCrons
 
     -- Handle events from the web server
     Calamity.react
