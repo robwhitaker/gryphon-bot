@@ -48,9 +48,8 @@
             cabal2nix
             cabal-install
 
-            floskell
-            ghcid
-            hlint
+            haskell-language-server
+
           ];
         };
         defaultPackage = packages.gryphon-bot;
