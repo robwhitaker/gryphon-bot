@@ -1,90 +1,84 @@
 {-# LANGUAGE BangPatterns #-}
 
-module Main ( main ) where
-
-import qualified System.Environment       as Env
+module Main (main) where
 
 import qualified Control.Concurrent.Async as Async
-
-import qualified Data.Aeson               as Aeson
-
+import qualified Data.Aeson as Aeson
 import qualified Di
-
-import           Optics                   ( (^.) )
-
-import           Types
-
-import           GryphonBot.Bot
-
-import           Habitica.Request
-
-import           Web.Server
+import GryphonBot.Bot
+import Habitica.Request
+import Optics ((^.))
+import qualified System.Environment as Env
+import Types
+import Web.Server
 
 main :: IO ()
 main = do
-    Di.new $ \di -> do
-        (config, discordToken, habiticaAuthHeaders)
-            <- Di.runDiT di $ Di.push "init" $ do
-                !mbConfigFile <- liftIO $ Env.lookupEnv "BOT_CONFIG"
-                !configFile <- case mbConfigFile of
-                    Just file -> pure file
-                    _         -> failWithLog "Could not find BOT_CONFIG in environment"
+  Di.new $ \di -> do
+    (config, discordToken, habiticaAuthHeaders) <-
+      Di.runDiT di $ Di.push "init" $ do
+        !mbConfigFile <- liftIO $ Env.lookupEnv "BOT_CONFIG"
+        !configFile <- case mbConfigFile of
+          Just file -> pure file
+          _ -> failWithLog "Could not find BOT_CONFIG in environment"
 
-                Di.info_ $ "Parsing configuration file: " <> fromString configFile
-                !(config :: Config) <- do
-                    eConf <- liftIO $ Aeson.eitherDecodeFileStrict' configFile
-                    case eConf of
-                        Left err   -> failWithLog
-                            ("Error parsing config file: " <> fromString err)
-                        Right conf -> pure conf
+        Di.info_ $ "Parsing configuration file: " <> fromString configFile
+        !(config :: Config) <- do
+          eConf <- liftIO $ Aeson.eitherDecodeFileStrict' configFile
+          case eConf of
+            Left err ->
+              failWithLog
+                ("Error parsing config file: " <> fromString err)
+            Right conf -> pure conf
 
-                Di.info_ "Reading Discord API token from environment"
-                !discordToken <- do
-                    mbToken <- liftIO $ readBotTokenFromEnv "DISCORD_TOKEN"
-                    case mbToken of
-                        Nothing    ->
-                            failWithLog "Could not find DISCORD_TOKEN in environment"
-                        Just token -> pure token
+        Di.info_ "Reading Discord API token from environment"
+        !discordToken <- do
+          mbToken <- liftIO $ readBotTokenFromEnv "DISCORD_TOKEN"
+          case mbToken of
+            Nothing ->
+              failWithLog "Could not find DISCORD_TOKEN in environment"
+            Just token -> pure token
 
-                Di.info_ "Reading Habitica API key from environment"
-                !habiticaApiKey <- do
-                    eKey <- liftIO $ readApiKeyFromEnv "HABITICA_API_KEY"
-                    case eKey of
-                        Left err  -> failWithLog (show err)
-                        Right key -> pure key
+        Di.info_ "Reading Habitica API key from environment"
+        !habiticaApiKey <- do
+          eKey <- liftIO $ readApiKeyFromEnv "HABITICA_API_KEY"
+          case eKey of
+            Left err -> failWithLog (show err)
+            Right key -> pure key
 
-                let botXClient =
-                        xClient (config ^. #habiticaBotUserId) (config ^. #appName)
-                    !habiticaAuthHeaders =
-                        habiticaHeaders
-                            (config ^. #habiticaBotUserId)
-                            habiticaApiKey
-                            botXClient
+        let botXClient =
+              xClient (config ^. #habiticaBotUserId) (config ^. #appName)
+            !habiticaAuthHeaders =
+              habiticaHeaders
+                (config ^. #habiticaBotUserId)
+                habiticaApiKey
+                botXClient
 
-                pure (config, discordToken, habiticaAuthHeaders)
+        pure (config, discordToken, habiticaAuthHeaders)
 
-        botInputChannelRef <- newIORef Nothing
+    botInputChannelRef <- newIORef Nothing
 
-        let serverAction =
-                runServer (config ^. #server) habiticaAuthHeaders di botInputChannelRef
-            botAction =
-                runBot
-                    (config ^. #bot)
-                    habiticaAuthHeaders
-                    discordToken
-                    di
-                    botInputChannelRef
+    let serverAction =
+          runServer (config ^. #server) habiticaAuthHeaders di botInputChannelRef
+        botAction =
+          runBot
+            (config ^. #bot)
+            habiticaAuthHeaders
+            discordToken
+            di
+            botInputChannelRef
 
-        void $ Async.withAsync botAction $ \bot -> do
-            Async.withAsync serverAction $ \server -> do
-                -- If one thread fails, properly cancel the other so it can call
-                -- its error handlers and close cleanly
-                Async.waitEitherCancel server bot
+    void $ Async.withAsync botAction $ \bot -> do
+      Async.withAsync serverAction $ \server -> do
+        -- If one thread fails, properly cancel the other so it can call
+        -- its error handlers and close cleanly
+        Async.waitEitherCancel server bot
   where
-    failWithLog :: forall a m path.
-                (MonadIO m, Di.MonadDi Di.Level path Di.Message m)
-                => Di.Message
-                -> m a
+    failWithLog ::
+      forall a m path.
+      (MonadIO m, Di.MonadDi Di.Level path Di.Message m) =>
+      Di.Message ->
+      m a
     failWithLog msg = do
-        Di.error_ msg
-        exitFailure
+      Di.error_ msg
+      exitFailure
