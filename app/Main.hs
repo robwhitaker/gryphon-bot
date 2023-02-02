@@ -16,7 +16,7 @@ import Web.Server
 main :: IO ()
 main = do
   Di.new $ \di -> do
-    (config, discordToken, habiticaAuthHeaders) <-
+    (config, secret, discordToken, habiticaAuthHeaders) <-
       Di.runDiT di $ Di.push "init" $ do
         !mbConfigFile <- liftIO $ Env.lookupEnv "BOT_CONFIG"
         !configFile <- case mbConfigFile of
@@ -31,6 +31,13 @@ main = do
               failWithLog
                 ("Error parsing config file: " <> fromString err)
             Right conf -> pure conf
+
+        Di.info_ "Reading endpoint secret from environment"
+        !secret <- do
+          mbSecret <- liftIO $ Env.lookupEnv "SECRET"
+          case mbSecret of
+            Nothing -> failWithLog "Could not find SECRET in environment"
+            Just s -> pure $ Secret $ toText s
 
         Di.info_ "Reading Discord API token from environment"
         !discordToken <- do
@@ -55,12 +62,12 @@ main = do
                 habiticaApiKey
                 botXClient
 
-        pure (config, discordToken, habiticaAuthHeaders)
+        pure (config, secret, discordToken, habiticaAuthHeaders)
 
     botInputChannelRef <- newIORef Nothing
 
     let serverAction =
-          runServer (config ^. #server) habiticaAuthHeaders di botInputChannelRef
+          runServer (config ^. #server) secret habiticaAuthHeaders di botInputChannelRef
         botAction =
           runBot
             (config ^. #bot)

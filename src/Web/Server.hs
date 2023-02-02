@@ -42,7 +42,7 @@ import Servant
     (:>),
   )
 import qualified Servant
-import Types (BotEventChanRef, CustomEvent (ServerMessage), ServerConfig)
+import Types (BotEventChanRef, CustomEvent (ServerMessage), Secret (Secret), ServerConfig)
 
 type API =
   "discord"
@@ -54,6 +54,7 @@ type API =
 -- Concrete effects stack for the final server
 type ServerEffects =
   '[ Input BotEventChanRef,
+     Input Secret,
      Input ServerConfig,
      Error ServerError,
      LogEff,
@@ -62,25 +63,21 @@ type ServerEffects =
    ]
 
 validateWebhookEventSource ::
-  Members '[LogEff, Input ServerConfig, Error ServerError] r =>
+  Members '[LogEff, Input Secret, Error ServerError] r =>
   Maybe Text ->
   Sem r ()
 validateWebhookEventSource mbSecret = DiP.push "validate-req-source" $ do
-  expectedSecret <- P.inputs (^. #habiticaSecret)
-  case fmap (== expectedSecret) mbSecret of
-    Just True -> do
-      DiP.debug_ "Request source successfully validated"
-    _ -> do
+  Secret expectedSecret <- P.input
+  if Just expectedSecret == mbSecret
+    then DiP.info_ "Request source successfully validated"
+    else do
       DiP.warning_ "Denying request from unknown source"
-      P.throw $
-        Servant.err403
-          { errBody = "Who are you people???"
-          }
+      P.throw $ Servant.err403 {errBody = "Who are you people???"}
 
 partyMessage ::
   Members
     '[ LogEff,
-       Input ServerConfig,
+       Input Secret,
        Input BotEventChanRef,
        Error ServerError,
        Embed IO
@@ -116,11 +113,12 @@ server = partyMessage
 
 runServer ::
   ServerConfig ->
+  Secret ->
   HabiticaAuthHeaders ->
   Di Di.Level Di.Path Di.Message ->
   BotEventChanRef ->
   IO ()
-runServer config headers di chanVar =
+runServer config secret headers di chanVar =
   bracket_ (trySetWebhookEnabled 5 True) (trySetWebhookEnabled 5 False) $ do
     Di.runDiT di $
       Di.push "server" $
@@ -139,6 +137,7 @@ runServer config headers di chanVar =
         . DiP.runDiToIO di
         . P.runError
         . P.runInputConst config
+        . P.runInputConst secret
         . P.runInputConst chanVar
         . DiP.push "server"
         . DiP.attr "port" (config ^. #port)

@@ -5,7 +5,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
 
-module Types (BotEventChan, BotEventChanRef, CustomEvent (..), Config, ServerConfig, BotConfig) where
+module Types (BotEventChan, BotEventChanRef, CustomEvent (..), Config, ServerConfig, Secret (..), BotConfig) where
 
 import Calamity (CalamityEvent, Channel, Snowflake)
 import Control.Concurrent.Chan.Unagi (InChan)
@@ -34,12 +34,14 @@ data Config = Config
   deriving anyclass (FromJSON)
 
 data ServerConfig = ServerConfig
-  { habiticaSecret :: Text,
-    port :: Int,
+  { port :: Int,
     webhookId :: UUID
   }
   deriving stock (Show, Generic)
   deriving anyclass (FromJSON)
+
+newtype Secret = Secret Text
+  deriving stock (Show)
 
 data BotConfig = BotConfig
   { systemMessagesChannelId :: Snowflake Channel
