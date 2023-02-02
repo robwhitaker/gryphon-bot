@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
+
 module GryphonBot.Commands.Utils
   ( commandWithError,
     maxTextLenBy,
@@ -8,7 +10,7 @@ module GryphonBot.Commands.Utils
   )
 where
 
-import Calamity.Commands (Context)
+import Calamity (Tellable)
 import qualified Data.Text as T
 import qualified DiPolysemy as DiP
 import GryphonBot.Commands.Types (BotCommandC)
@@ -22,9 +24,9 @@ import Polysemy.Error (Error)
 import qualified Polysemy.Error as P
 
 commandWithError ::
-  (BotCommandC '[HabiticaApi, Error HabiticaRequestError] r) =>
-  (Context -> Sem r ()) ->
-  Context ->
+  (BotCommandC '[HabiticaApi, Error HabiticaRequestError] r, Tellable t) =>
+  (t -> Sem r ()) ->
+  t ->
   Sem r ()
 commandWithError cmd ctx =
   cmd ctx `P.catch` \err -> case err of

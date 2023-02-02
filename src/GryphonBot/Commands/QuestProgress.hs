@@ -1,9 +1,10 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
 
 module GryphonBot.Commands.QuestProgress (questProgress) where
 
-import Calamity.Commands (Context)
+import Calamity (Tellable)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified DiPolysemy as DiP
@@ -138,10 +139,10 @@ mkCollectionQuestMessage party participants =
         <> show itemCount
 
 questProgress ::
-  BotCommandC '[HabiticaApi, Error HabiticaRequestError] r => Context -> Sem r ()
+  forall t r. (BotCommandC '[HabiticaApi, Error HabiticaRequestError] r, Tellable t) => t -> Sem r ()
 questProgress = commandWithError questProgress'
 
-questProgress' :: BotCommandC '[HabiticaApi] r => Context -> Sem r ()
+questProgress' :: (BotCommandC '[HabiticaApi] r, Tellable t) => t -> Sem r ()
 questProgress' ctx = do
   DiP.info_ "Processing !questProgress command"
 

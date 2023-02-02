@@ -13,7 +13,24 @@ build-type:          Simple
 extra-doc-files:     README.md
                      CHANGELOG.md
 
-common common-options
+executable gryphon-bot
+  hs-source-dirs:      app
+                     , src
+
+  main-is:             Main.hs
+
+  other-modules:       GryphonBot.Bot
+                     , GryphonBot.Commands.LastCrons
+                     , GryphonBot.Commands.QuestProgress
+                     , GryphonBot.Commands.Types
+                     , GryphonBot.Commands.Utils
+                     , GryphonBot.Utils
+                     , Habitica.Api
+                     , Habitica.Request
+                     , Habitica.Types
+                     , Types
+                     , Web.Server
+
   build-depends:       base >= 4.13.0.0
                      , relude
                      , optics
@@ -38,18 +55,6 @@ common common-options
   mixins:              base hiding (Prelude)
                      , relude (Relude as Prelude)
 
-  other-modules:       GryphonBot.Bot
-                     , GryphonBot.Commands.LastCrons
-                     , GryphonBot.Commands.QuestProgress
-                     , GryphonBot.Commands.Types
-                     , GryphonBot.Commands.Utils
-                     , GryphonBot.Utils
-                     , Habitica.Api
-                     , Habitica.Request
-                     , Habitica.Types
-                     , Types
-                     , Web.Server
-
   default-extensions:  MultiWayIf
                      , DataKinds
                      , FlexibleContexts
@@ -73,6 +78,13 @@ common common-options
                      , ViewPatterns
 
   ghc-options:         -fplugin=Polysemy.Plugin
+                       -threaded
+                       -rtsopts
+                       -with-rtsopts=-N
+                       -O2
+                       -flate-specialise
+                       -fspecialise-aggressively
+                       -ddump-minimal-imports
 
                        -Wall
                        -Wcompat
@@ -99,17 +111,3 @@ common common-options
     ghc-options:       -Wmissing-deriving-strategies
 
   default-language:    Haskell2010
-
-executable gryphon-bot
-  import:              common-options
-  hs-source-dirs:      app
-                     , src
-  main-is:             Main.hs
-
-  ghc-options:         -threaded
-                       -rtsopts
-                       -with-rtsopts=-N
-                       -O2
-                       -flate-specialise
-                       -fspecialise-aggressively
-                       -ddump-minimal-imports

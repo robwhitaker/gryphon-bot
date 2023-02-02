@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
 
 module Habitica.Request
   ( -- * Habitica authentication
@@ -81,7 +82,6 @@ import Polysemy.Error (Error)
 import qualified Polysemy.Error as P
 import qualified Polysemy.Internal as P (send)
 import qualified System.Environment as Env
-import Prelude hiding (Option)
 
 newtype HabiticaAuthHeaders = HabiticaAuthHeaders (Option 'Https)
 

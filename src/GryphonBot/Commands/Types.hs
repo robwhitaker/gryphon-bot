@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
+
 module GryphonBot.Commands.Types (BotCommandC) where
 
 import Calamity (BotC)

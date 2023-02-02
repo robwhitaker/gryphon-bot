@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
+
 module GryphonBot.Utils (tell) where
 
 import Calamity (BotC, Tellable)

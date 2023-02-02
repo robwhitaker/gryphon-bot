@@ -14,45 +14,35 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        haskellPackages = pkgs.haskell.packages.ghc8103.override {
-          overrides = hsPackagesNew: hsPackagesOld:
-            let
-              hsOverride = pkg: hsPackagesNew.callPackage (./nix-overrides + "/${pkg}.nix") {};
-            in {
-              calamity = hsOverride "calamity";
-              generic-override-aeson = hsOverride "generic-override-aeson";
-              stm-containers = hsOverride "stm-containers";
-              haskell-src = hsOverride "haskell-src";
-              stm-hamt = hsOverride "stm-hamt";
-              primitive-extras = hsOverride "primitive-extras";
-              happy = hsOverride "happy";
-
-              floskell = hsPackagesOld.floskell.overrideAttrs (_: {
-                patches = [ ./nix-overrides/patches/floskell.patch ];
-              });
-
-              gryphon-bot = hsPackagesNew.callPackage ./. {};
-            };
+        haskellPackages = pkgs.haskell.packages.ghc92.override {
+          overrides = final: prev: {
+            # Add our bot to haskellPackages
+            gryphon-bot = final.callCabal2nix "gryphon-bot" self { };
+          };
         };
-        botDeps = haskellPackages.gryphon-bot.getBuildInputs.haskellBuildInputs;
-        customGhc = haskellPackages.ghcWithHoogle (_: botDeps);
+        customGhc = haskellPackages.ghcWithHoogle (_:
+          haskellPackages.gryphon-bot.getBuildInputs.haskellBuildInputs
+        );
       in
-      rec {
-        packages = flake-utils.lib.flattenTree {
-          gryphon-bot = haskellPackages.gryphon-bot;
-        };
+      {
+        packages.gryphon-bot = haskellPackages.gryphon-bot;
+        defaultPackage = self.packages.${system}.gryphon-bot;
+
         devShell = pkgs.mkShell {
           buildInputs = with haskellPackages; [
+            # Haskell tooling
             customGhc
-
             cabal2nix
             cabal-install
-
             haskell-language-server
 
+            # Nix formatter
+            pkgs.nixpkgs-fmt
+
+            # Needed for cabal to build the project
+            pkgs.zlib
           ];
         };
-        defaultPackage = packages.gryphon-bot;
       }
     );
 }

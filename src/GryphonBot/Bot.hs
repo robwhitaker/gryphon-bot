@@ -1,10 +1,12 @@
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
+
 module GryphonBot.Bot (runBot, readBotTokenFromEnv) where
 
 import Calamity (BotC, EventType (CustomEvt), Token)
 import qualified Calamity
 import qualified Calamity.Cache.InMemory as Cache
-import Calamity.Commands (ParsePrefix)
 import qualified Calamity.Commands as Commands
+import Calamity.Commands.Context (FullContext, useFullContext)
 import qualified Calamity.Metrics.Noop as Metrics
 import Calamity.Types.LogEff (LogEff)
 import Control.Exception (finally)
@@ -15,12 +17,10 @@ import GryphonBot.Commands.LastCrons as BotCommands
 import GryphonBot.Commands.QuestProgress as BotCommands
 import GryphonBot.Utils (tell)
 import Habitica.Request
-  ( HabiticaApi,
-    HabiticaAuthHeaders,
+  ( HabiticaAuthHeaders,
     HabiticaRequestError,
   )
 import qualified Habitica.Request as HReq
-import Habitica.Types (GroupChatReceivedMessage)
 import qualified Network.HTTP.Req as Req
 import Optics ((%), (^.))
 import Polysemy (Member, Members, Sem)
@@ -36,6 +36,7 @@ import Types
   ( BotConfig,
     BotEventChan,
     BotEventChanRef,
+    CustomEvent (ServerMessage),
   )
 
 readBotTokenFromEnv :: String -> IO (Maybe Token)
@@ -47,52 +48,6 @@ writeInputChannel ::
 writeInputChannel newMbChan = do
   chanRef <- P.input
   writeIORef chanRef newMbChan
-
-bot ::
-  forall r.
-  ( BotC r,
-    Members
-      '[ ParsePrefix,
-         Embed IO,
-         Input BotEventChanRef,
-         Input BotConfig,
-         HabiticaApi,
-         Error HabiticaRequestError,
-         LogEff
-       ]
-      r
-  ) =>
-  Sem r ()
-bot = do
-  -- Share the bot's input channel so the web server can send events to the bot
-  chan <- P.asks Calamity.eventsIn
-  writeInputChannel (Just chan)
-
-  -- Register bot commands
-  Commands.addCommands $ do
-    Commands.helpCommand
-    Commands.commandA
-      @'[]
-      "questProgress"
-      ["questprogress", "quest_progress"]
-      BotCommands.questProgress
-    Commands.commandA
-      @'[]
-      "lastCrons"
-      ["lastcrons", "last_crons"]
-      BotCommands.lastCrons
-
-  -- Handle events from the web server
-  Calamity.react
-    @('CustomEvt "system-message" GroupChatReceivedMessage)
-    handleSystemMessage
-
-  pass
-  where
-    handleSystemMessage :: GroupChatReceivedMessage -> Sem r ()
-    handleSystemMessage msg = do
-      channelId <- P.inputs @BotConfig (^. #systemMessagesChannelId)
-      tell channelId (msg ^. #chat % #text)
 
 runBot ::
   BotConfig ->
@@ -114,15 +69,31 @@ runBot config habiticaAuthHeaders botToken di chanVar =
       . Cache.runCacheInMemory
       . Metrics.runMetricsNoop
       . Commands.useConstantPrefix "!"
-      $ Calamity.runBotIO botToken Calamity.defaultIntents bot
+      . useFullContext
+      . Calamity.runBotIO botToken Calamity.defaultIntents
+      $ do
+        chan <- P.asks Calamity.eventsIn
+        writeInputChannel (Just chan)
+        Commands.addCommands $ do
+          Commands.helpCommand @FullContext
+          Commands.commandA @'[] "questProgress" ["questprogress", "quest_progress"] (BotCommands.questProgress @FullContext)
+          Commands.commandA @'[] "lastCrons" ["lastcrons", "last_crons"] (BotCommands.lastCrons @FullContext)
+
+        -- Handle events from the web server
+        void $ Calamity.react @('CustomEvt CustomEvent) handleSystemMessage
   )
     -- The bot has exited, so remove the shared bot event channel reference
     `finally` writeIORef chanVar Nothing
   where
+    handleSystemMessage :: (BotC r, Member (Input BotConfig) r) => CustomEvent -> Sem r ()
+    handleSystemMessage (ServerMessage msg) = do
+      channelId <- P.inputs @BotConfig (^. #systemMessagesChannelId)
+      tell channelId (msg ^. #chat % #text)
+
     -- TODO: this is duplicated from Server.hs and should be put in a
     --       shared location
     logError ::
-      Member LogEff r =>
+      (Member LogEff r) =>
       Sem (Error HabiticaRequestError ': r) a ->
       Sem r (Either HabiticaRequestError a)
     logError sem = do

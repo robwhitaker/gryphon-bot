@@ -4,3 +4,4 @@ result-doc
 dist/
 dist-newstyle/
 config.json
+cabal.project*

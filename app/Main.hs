@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
 
 module Main (main) where
 

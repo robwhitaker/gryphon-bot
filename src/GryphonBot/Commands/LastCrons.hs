@@ -1,9 +1,10 @@
 module GryphonBot.Commands.LastCrons (lastCrons) where
 
-import Calamity.Commands (Context)
+import Calamity (Tellable)
 import qualified Data.Text as T (justifyLeft)
 import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (defaultTimeLocale, formatTime)
+import Di (Path)
 import qualified DiPolysemy as DiP (debug_, info_)
 import GryphonBot.Commands.Types (BotCommandC)
 import GryphonBot.Commands.Utils
@@ -23,12 +24,15 @@ import Polysemy (Sem)
 import Polysemy.Error (Error)
 
 lastCrons ::
-  BotCommandC '[HabiticaApi, Error HabiticaRequestError] r => Context -> Sem r ()
+  forall t r.
+  (BotCommandC '[HabiticaApi, Error HabiticaRequestError] r, Tellable t) =>
+  t ->
+  Sem r ()
 lastCrons = commandWithError lastCrons'
 
-lastCrons' :: BotCommandC '[HabiticaApi] r => Context -> Sem r ()
+lastCrons' :: (BotCommandC '[HabiticaApi] r, Tellable t) => t -> Sem r ()
 lastCrons' ctx = do
-  DiP.info_ "Processing !lastCrons command"
+  DiP.info_ @Path "Processing !lastCrons command"
 
   DiP.debug_ "Fetching party members from Habitica"
   members <- HReq.responseBody <$> Api.fetchPartyMembers

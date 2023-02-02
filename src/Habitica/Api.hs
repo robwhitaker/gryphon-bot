@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
+
 module Habitica.Api
   ( -- * Query Habitica
     fetchParty,

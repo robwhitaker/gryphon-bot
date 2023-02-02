@@ -3,13 +3,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
 
-module Types (BotEventChan, BotEventChanRef, Config, ServerConfig, BotConfig) where
+module Types (BotEventChan, BotEventChanRef, CustomEvent (..), Config, ServerConfig, BotConfig) where
 
 import Calamity (CalamityEvent, Channel, Snowflake)
 import Control.Concurrent.Chan.Unagi (InChan)
 import Data.Aeson (FromJSON)
 import Data.UUID (UUID)
+import Habitica.Types (GroupChatReceivedMessage)
 import qualified Optics
 
 -- Reference to the bot's event channel so we can send it
@@ -17,6 +19,10 @@ import qualified Optics
 type BotEventChanRef = IORef (Maybe BotEventChan)
 
 type BotEventChan = InChan CalamityEvent
+
+data CustomEvent
+  = ServerMessage GroupChatReceivedMessage
+  deriving stock (Typeable)
 
 data Config = Config
   { server :: ServerConfig,

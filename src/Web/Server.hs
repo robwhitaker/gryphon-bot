@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fplugin=Polysemy.Plugin #-}
+
 module Web.Server (runServer) where
 
 import qualified Calamity
@@ -40,7 +42,7 @@ import Servant
     (:>),
   )
 import qualified Servant
-import Types (BotEventChanRef, ServerConfig)
+import Types (BotEventChanRef, CustomEvent (ServerMessage), ServerConfig)
 
 type API =
   "discord"
@@ -104,7 +106,7 @@ partyMessage mbSecret msg = DiP.push "discord" $ DiP.push "party-message" $ do
           P.embed $
             Unagi.writeChan
               chan
-              (Calamity.customEvt @"system-message" chatMsg)
+              (Calamity.customEvt (ServerMessage chatMsg))
         else DiP.debug_ "Message is a user message. Ignoring."
 
   pure Servant.NoContent
